@@ -10,12 +10,13 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-
+from PIL import Image
 from compressai.datasets import ImageFolder
 from compressai.zoo import models
 from pytorch_msssim import ms_ssim
+import glob
 
 from models import MAMBAVC
 from torch.utils.tensorboard import SummaryWriter   
@@ -26,7 +27,31 @@ torch.backends.cudnn.benchmark=False
 
 def compute_msssim(a, b):
     return ms_ssim(a, b, data_range=1.)
+class ImageNet(Dataset):
+    def __init__(self, root, transform=None):
+        #splitdir = Path(root)
 
+        #if not splitdir.is_dir():
+        #    raise RuntimeError(f'Invalid directory "{root}"')
+
+        self.samples = glob.glob(root + '/*/*.JPEG')
+
+        self.transform = transform
+
+    def __getitem__(self, index):
+        """
+        Args:
+            index (int): Index
+        Returns:
+            img: `PIL.Image.Image` or transformed `PIL.Image.Image`.
+        """
+        img = Image.open(self.samples[index]).convert("RGB")
+        if self.transform:
+            return self.transform(img)
+        return img
+
+    def __len__(self):
+        return len(self.samples)
 class RateDistortionLoss(nn.Module):
     """Custom rate distortion loss with a Lagrangian parameter."""
 
@@ -357,12 +382,12 @@ def main(argv):
     save_path = os.path.join(args.save_path, str(args.lmbda))
     if not os.path.exists(save_path):
         os.makedirs(save_path)
-        # os.makedirs(save_path + "tensorboard/")
+        os.makedirs(save_path + "tensorboard/")
     setup_logger(save_path + '/' + time.strftime('%Y%m%d_%H%M%S') + '.log')
     if args.seed is not None:
         torch.manual_seed(args.seed)
         random.seed(args.seed)
-    # writer = SummaryWriter(save_path + "tensorboard/")
+    writer = SummaryWriter(save_path + "tensorboard/")
     for k in args.__dict__:
         logging.info(k + ':' + str(args.__dict__[k]))
 
@@ -376,8 +401,10 @@ def main(argv):
     )
 
 
-    train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms)
-    test_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms)
+    #train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms)
+    #test_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms)
+    train_dataset = ImageNet(args.dataset + "/train.X[1-4]", transform=train_transforms)
+    test_dataset = ImageNet(args.dataset +"/val.X" , transform=test_transforms)
 
     device = "cuda" if args.cuda and torch.cuda.is_available() else "cpu"
     print(device)
@@ -458,7 +485,7 @@ def main(argv):
                 is_best,
                 epoch,
                 save_path,
-                save_path + str(epoch) + "_checkpoint.pth.tar",
+                save_path + str(net.__class__.__name__) + "_" + str(epoch) +  "_checkpoint.pth.tar",
             )
 
 

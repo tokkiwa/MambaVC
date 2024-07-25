@@ -310,21 +310,18 @@ class SwinBlock(nn.Module):
 try:
     import selective_scan_cuda_oflex
 except Exception as e:
-    ...
-    # print(f"WARNING: can not import selective_scan_cuda_oflex.", flush=True)
-    # print(e, flush=True)
+    print(f"WARNING: can not import selective_scan_cuda_oflex.", flush=True)
+    print(e, flush=True)
 try:
     import selective_scan_cuda_core
 except Exception as e:
-    ...
-    # print(f"WARNING: can not import selective_scan_cuda_core.", flush=True)
-    # print(e, flush=True)
+    print(f"WARNING: can not import selective_scan_cuda_core.", flush=True)
+    print(e, flush=True)
 try:
     import selective_scan_cuda
 except Exception as e:
-    ...
-    # print(f"WARNING: can not import selective_scan_cuda.", flush=True)
-    # print(e, flush=True)
+    print(f"WARNING: can not import selective_scan_cuda.", flush=True)
+    print(e, flush=True)
 
 
 class SelectiveScanOflex(torch.autograd.Function):
@@ -518,7 +515,8 @@ class SelectiveScanCore(torch.autograd.Function):
     @torch.cuda.amp.custom_fwd
     def forward(ctx, u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=False, nrows=1, backnrows=1, oflex=True):
         ctx.delta_softplus = delta_softplus
-        out, x, *rest = selective_scan_cuda_core.fwd(u, delta, A, B, C, D, delta_bias, delta_softplus, 1)
+        #out, x, *rest = selective_scan_cuda_core.fwd(u, delta, A, B, C, D, delta_bias, delta_softplus, 1)
+        out, x, *rest = selective_scan_cuda_oflex.fwd(u, delta, A, B, C, D, delta_bias, delta_softplus, 1)
         ctx.save_for_backward(u, delta, A, B, C, D, delta_bias, x)
         return out
     
@@ -528,7 +526,10 @@ class SelectiveScanCore(torch.autograd.Function):
         u, delta, A, B, C, D, delta_bias, x = ctx.saved_tensors
         if dout.stride(-1) != 1:
             dout = dout.contiguous()
-        du, ddelta, dA, dB, dC, dD, ddelta_bias, *rest = selective_scan_cuda_core.bwd(
+        #du, ddelta, dA, dB, dC, dD, ddelta_bias, *rest = selective_scan_cuda_core.bwd(
+        #    u, delta, A, B, C, D, delta_bias, dout, x, ctx.delta_softplus, 1
+        #)
+        du, ddelta, dA, dB, dC, dD, ddelta_bias, *rest = selective_scan_cuda_oflex.bwd(
             u, delta, A, B, C, D, delta_bias, dout, x, ctx.delta_softplus, 1
         )
         return (du, ddelta, dA, dB, dC, dD, ddelta_bias, None, None, None, None)
@@ -617,9 +618,9 @@ class SS2D(nn.Module):
         dt_init="random",
         dt_scale=1.0,
         dt_init_floor=1e-4,
-        initialize="v0",
+        initialize="v3",
         # ======================
-        forward_type="v2",
+        forward_type="v3",
         # ======================
         **kwargs,
     ):
@@ -1104,7 +1105,7 @@ class VSSBlock(nn.Module):
         ssm_conv_bias=True,
         ssm_drop_rate: float = 0,
         ssm_init="v0",
-        forward_type="v2",
+        forward_type="v3",
         # =============================
         use_checkpoint: bool = False,
         post_norm: bool = False,
@@ -1182,17 +1183,17 @@ class MAMBAVC(CompressionModel):
 
         self.m_down1 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2") 
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0") 
                       for i in range(depths[0])] + [conv(N*2, N*2, kernel_size=3, stride=2)]
         
         self.m_down2 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i + depths[0]], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2")
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0")
                       for i in range(depths[1])] + [conv(N*2, N*2, kernel_size=3, stride=2)]
         
         self.m_down3 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i + depths[0] + depths[1]], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2")
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0")
                       for i in range(depths[2])] + [conv(N*2, M, kernel_size=3, stride=2)]
         
         self.g_a = nn.Sequential(*[conv(3, N*2, kernel_size=5, stride=2)] + self.m_down1 + self.m_down2 + self.m_down3)
@@ -1200,7 +1201,7 @@ class MAMBAVC(CompressionModel):
 
         self.ha_down1 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i + depths[0] + depths[1] + depths[2]], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2")
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0")
                       for i in range(depths[3])] + [conv(N*2, 192, kernel_size=3, stride=2)]
         
         self.h_a = nn.Sequential(
@@ -1211,7 +1212,7 @@ class MAMBAVC(CompressionModel):
 
         self.hs_up1 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2")
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0")
                       for i in range(depths[0])] + [deconv(N*2, M, kernel_size=3, stride=2)]
 
         self.h_mean_s = nn.Sequential(
@@ -1220,7 +1221,7 @@ class MAMBAVC(CompressionModel):
 
         self.hs_up2 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2") 
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0") 
                       for i in range(depths[0])] + [deconv(N*2, M, kernel_size=3, stride=2)]
 
         self.h_scale_s = nn.Sequential(
@@ -1229,17 +1230,17 @@ class MAMBAVC(CompressionModel):
 
         self.m_up1 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i + depths[0]], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2")
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0")
                       for i in range(depths[1])] + [deconv(N*2, N*2, kernel_size=3, stride=2)]
         
         self.m_up2 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i + depths[0] + depths[1]], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2")
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0")
                       for i in range(depths[2])] + [deconv(N*2, N*2, kernel_size=3, stride=2)]
         
         self.m_up3 = [VSSBlock(hidden_dim = 2*N, drop_path = dpr[i + depths[0] + depths[1] + depths[2]], use_checkpoint = False, 
                                  norm_layer=nn.LayerNorm, ssm_d_state=16, ssm_ratio=2.0, ssm_dt_rank="auto", 
-                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0", forward_type="v2") 
+                                 ssm_conv=3, ssm_conv_bias=True, ssm_drop_rate=0.0, ssm_init="v0") 
                       for i in range(depths[3])] + [deconv(N*2, 3, kernel_size=5, stride=2)]
 
         self.g_s = nn.Sequential(*[deconv(M, N*2, kernel_size=3, stride=2)] + self.m_up1 + self.m_up2 + self.m_up3)
