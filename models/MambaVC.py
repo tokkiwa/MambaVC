@@ -635,6 +635,7 @@ class SS2D(nn.Module):
         self.d_conv = d_conv
 
         # tags for forward_type ==============================
+        # valueの最後がtagであるかどうかをチェックして、tagを削除して返す
         def checkpostfix(tag, value):
             ret = value[-len(tag):] == tag
             if ret:
@@ -1105,7 +1106,7 @@ class VSSBlock(nn.Module):
         ssm_conv_bias=True,
         ssm_drop_rate: float = 0,
         ssm_init="v0",
-        forward_type="v3",
+        forward_type="v4",
         # =============================
         use_checkpoint: bool = False,
         post_norm: bool = False,
